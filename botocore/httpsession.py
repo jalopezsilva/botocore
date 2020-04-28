@@ -253,8 +253,14 @@ class URLLib3Session(object):
         proxy_scheme = urlparse(proxy_url).scheme
         using_https_forwarding_proxy = (
             proxy_scheme == 'https' and
-            self._proxy_config.proxies_kwargs().get('use_forwarding_for_https', False)
+            self._proxy_config.proxies_kwargs().get('use_forwarding_for_https',
+                                                    True)
         )
+
+        # Default to forwarding.
+        # Will be removed once botocore changes are merged upstream.
+        if using_https_forwarding_proxy:
+            self._proxy_config.proxies_kwargs()['use_forwarding_for_https'] = True
 
         if using_https_forwarding_proxy or url.startswith('http:'):
             return url
@@ -267,11 +273,12 @@ class URLLib3Session(object):
     def send(self, request):
         try:
             proxy_url = self._proxy_config.proxy_url_for(request.url)
+            request_target = self._get_request_target(request.url, proxy_url)
+
             manager = self._get_connection_manager(request.url, proxy_url)
             conn = manager.connection_from_url(request.url)
             self._setup_ssl_cert(conn, request.url, self._verify)
 
-            request_target = self._get_request_target(request.url, proxy_url)
             urllib_response = conn.urlopen(
                 method=request.method,
                 url=request_target,
